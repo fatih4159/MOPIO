@@ -1,34 +1,41 @@
-# Gradle files
+# Gradle
 .gradle/
 build/
+*.class
 
-# Local configuration file (sdk path, etc)
+# Local configuration — contains SDK path, never commit
 local.properties
 
-# Log/OS Files
+# Log / OS files
 *.log
+.DS_Store
+Thumbs.db
 
-# Android Studio generated files and folders
+# Android Studio / IntelliJ
+.idea/
+*.iml
 captures/
 .externalNativeBuild/
 .cxx/
-*.aab
-*.apk
-output-metadata.json
-
-# IntelliJ
-*.iml
-.idea/
 misc.xml
 deploymentTargetDropDown.xml
 render.experimental.xml
 
-# Keystore files
+# Build outputs
+*.apk
+*.aab
+output-metadata.json
+
+# Keystore files — never commit signing keys
 *.jks
 *.keystore
 
-# Google Services (e.g. APIs or Firebase)
+# Google services
 google-services.json
 
-# Android Profiling
+# Profiling
 *.hprof
+
+# The actual proot binary is a binary blob; commit only the README placeholder.
+# Obtain via: ./scripts/get_proot.sh
+app/src/main/jniLibs/arm64-v8a/libproot.so

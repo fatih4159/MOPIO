@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MOPIO</string>
+
+    <!-- Phase 0 spike UI -->
+    <string name="phase0_title">Phase 0 — Hardware Spikes</string>
+    <string name="phase0_subtitle">Run all spikes on real hardware before proceeding.</string>
+    <string name="spike_a_name">Spike A</string>
+    <string name="spike_a_desc">proot + glibc exec\nuname -a &amp;&amp; python3 --version</string>
+    <string name="spike_b_name">Spike B</string>
+    <string name="spike_b_desc">PlatformIO build\npip install platformio + pio run esp32dev</string>
+    <string name="spike_c_name">Spike C</string>
+    <string name="spike_c_desc">USB + RFC2217 round-trip\nDTR/RTS toggle via serial-over-TCP</string>
+    <string name="spike_d_name">Spike D</string>
+    <string name="spike_d_desc">Real flash\npio run -t upload via RFC2217 bridge</string>
+    <string name="btn_run">Run</string>
+    <string name="btn_run_all">Run All Sequentially</string>
+
+    <!-- Notifications -->
+    <string name="notification_channel_build">Build &amp; Flash</string>
+    <string name="notification_title_bootstrapping">Setting up container…</string>
+    <string name="notification_title_building">Building firmware…</string>
+    <string name="notification_title_flashing">Flashing firmware…</string>
+
+    <!-- Errors -->
+    <string name="err_proot_missing">proot binary missing. Place libproot.so in jniLibs/arm64-v8a/.</string>
+    <string name="err_rootfs_not_bootstrapped">Rootfs not set up. Run bootstrap first.</string>
+    <string name="err_no_usb_device">No USB serial device found. Connect an ESP32 board via USB-OTG.</string>
+    <string name="err_usb_permission_denied">USB permission denied.</string>
+    <string name="hint_hold_boot">Tip: Hold BOOT button while connecting to enter download mode manually.</string>
+</resources>
