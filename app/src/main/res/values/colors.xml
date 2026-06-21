@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="mopio_primary">#1565C0</color>
+    <color name="mopio_secondary">#00897B</color>
+    <color name="console_background">#1E1E1E</color>
+    <color name="console_foreground">#D4D4D4</color>
+    <color name="status_pass">#2E7D32</color>
+    <color name="status_fail">#C62828</color>
+</resources>

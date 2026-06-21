@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- USB device filter for common ESP32 bridge chips. IDs are decimal. -->
+<resources>
+    <!-- Silabs CP2102 / CP2104 (most common ESP32-WROOM boards) -->
+    <usb-device vendor-id="4292" product-id="60000" />
+    <usb-device vendor-id="4292" product-id="60001" />
+    <!-- WCH CH340 / CH341 -->
+    <usb-device vendor-id="6790" product-id="29987" />
+    <usb-device vendor-id="6790" product-id="21795" />
+    <usb-device vendor-id="6790" product-id="29986" />
+    <!-- FTDI FT232R / FT2232 -->
+    <usb-device vendor-id="1027" product-id="24577" />
+    <usb-device vendor-id="1027" product-id="24592" />
+    <usb-device vendor-id="1027" product-id="24593" />
+    <usb-device vendor-id="1027" product-id="24596" />
+    <!-- Espressif native USB (ESP32-S2, S3, C3, C6 built-in USB-CDC/JTAG) -->
+    <usb-device vendor-id="12346" product-id="4097"  />
+    <usb-device vendor-id="12346" product-id="2"     />
+    <usb-device vendor-id="12346" product-id="4098"  />
+</resources>
