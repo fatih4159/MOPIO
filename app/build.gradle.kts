@@ -94,9 +94,13 @@ dependencies {
     // Encrypted PAT/token storage
     implementation(libs.security.crypto)
 
-    // Rootfs download
+    // Navigation
+    implementation(libs.navigation.compose)
+
+    // Rootfs download + extraction
     implementation(libs.okhttp)
     implementation(libs.gson)
+    implementation(libs.commons.compress)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

@@ -137,25 +137,20 @@ class ContainerManager(private val context: Context) {
 
     /**
      * Download and extract the Debian aarch64 rootfs (idempotent).
-     * Emits progress lines. In Phase 0 this is a stub — the rootfs must be pushed manually.
-     * Full implementation lives in Phase 1.
+     * Delegates to [RootfsInstaller] for download + Commons Compress extraction.
+     * Emits progress lines suitable for display in the setup wizard.
      */
     fun bootstrap(): Flow<String> = flow {
-        emit("Bootstrap state: isBootstrapped=$isBootstrapped, isProotAvailable=$isProotAvailable")
+        emit("proot available: $isProotAvailable")
         if (isBootstrapped) {
-            emit("Rootfs already ready at ${rootfsDir.absolutePath}")
+            emit("Rootfs already bootstrapped at ${rootfsDir.absolutePath}")
             return@flow
         }
-        rootfsDir.mkdirs()
-        platformioDir.mkdirs()
-
-        emit("[PHASE-0 STUB] Automatic rootfs download not yet implemented.")
-        emit("To test Phase 0 manually, push a minimal Debian aarch64 rootfs:")
-        emit("  adb push rootfs.tar.gz /sdcard/Download/")
-        emit("  adb shell run-as com.mopio.debug sh -c \\")
-        emit("    'mkdir -p \$FILES_DIR/rootfs && tar -xzf /sdcard/Download/rootfs.tar.gz -C \$FILES_DIR/rootfs/'")
-        emit("  where \$FILES_DIR = $(adb shell run-as com.mopio.debug pwd)")
-        emit("[BOOTSTRAP_INCOMPLETE]")
+        if (!isProotAvailable) {
+            emit("[ERROR] proot binary missing. See jniLibs/arm64-v8a/README.md")
+            return@flow
+        }
+        RootfsInstaller(context).install().collect { emit(it) }
     }.flowOn(Dispatchers.IO)
 
     // ── PlatformIO helpers ───────────────────────────────────────────────────

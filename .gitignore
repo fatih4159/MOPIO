@@ -1,6 +1,6 @@
-# Gradle
+# Gradle build directories (anchored to root and app module — never match source packages)
 .gradle/
-build/
+app/build/
 *.class
 
 # Local configuration — contains SDK path, never commit
@@ -21,9 +21,7 @@ misc.xml
 deploymentTargetDropDown.xml
 render.experimental.xml
 
-# Build outputs
-*.apk
-*.aab
+# Build outputs — exclude Gradle intermediate APKs but allow build/mopio-debug.apk
 output-metadata.json
 
 # Keystore files — never commit signing keys
