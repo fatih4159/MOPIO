@@ -21,14 +21,8 @@ misc.xml
 deploymentTargetDropDown.xml
 render.experimental.xml
 
-# Build outputs
-*.apk
-*.aab
+# Build outputs — exclude Gradle intermediate APKs but allow build/mopio-debug.apk
 output-metadata.json
-
-# Root build/ output folder — ignore APKs, keep the README
-/build/*.apk
-/build/*.aab
 
 # Keystore files — never commit signing keys
 *.jks
