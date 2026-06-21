@@ -1,6 +1,5 @@
 # Gradle build directories (anchored to root and app module — never match source packages)
 .gradle/
-/build/
 app/build/
 *.class
 
@@ -26,6 +25,10 @@ render.experimental.xml
 *.apk
 *.aab
 output-metadata.json
+
+# Root build/ output folder — ignore APKs, keep the README
+/build/*.apk
+/build/*.aab
 
 # Keystore files — never commit signing keys
 *.jks
