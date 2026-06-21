@@ -16,6 +16,8 @@ workManager     = "2.9.0"
 securityCrypto  = "1.1.0-alpha06"
 okhttp          = "4.12.0"
 gson            = "2.11.0"
+navigation      = "2.8.0"
+commonsCompress = "1.26.2"
 
 [libraries]
 androidx-core-ktx             = { group = "androidx.core",              name = "core-ktx",             version.ref = "coreKtx" }
@@ -44,6 +46,8 @@ work-runtime                  = { group = "androidx.work",              name = "
 security-crypto               = { group = "androidx.security",          name = "security-crypto",        version.ref = "securityCrypto" }
 okhttp                        = { group = "com.squareup.okhttp3",       name = "okhttp",                 version.ref = "okhttp" }
 gson                          = { group = "com.google.code.gson",       name = "gson",                   version.ref = "gson" }
+navigation-compose            = { group = "androidx.navigation",         name = "navigation-compose",      version.ref = "navigation" }
+commons-compress              = { group = "org.apache.commons",          name = "commons-compress",        version.ref = "commonsCompress" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
