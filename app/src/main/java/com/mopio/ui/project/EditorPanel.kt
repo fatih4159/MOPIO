@@ -6,24 +6,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.AndroidView
 import io.github.rosemoe.sora.widget.CodeEditor
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme
-import io.github.rosemoe.sora.text.Content
 
-/**
- * Wraps [CodeEditor] (sora-editor) in a Compose [AndroidView].
- *
- * The editor is configured with:
- *  - A dark colour scheme mirroring VSCode Dark+
- *  - Monospace typeface
- *  - Line numbers, word-wrap off (typical for code)
- *
- * Language/TextMate grammar is set via [language]; null = plain text.
- * Full TextMate C/C++ grammar integration: drop *.tmLanguage.json into assets/
- * and wire up via sora-editor's TextMateLanguage (Phase 2 polish task).
- */
 @Composable
 fun EditorPanel(
     content: String,
@@ -39,20 +25,24 @@ fun EditorPanel(
                 isWordwrap = false
                 isLineNumberEnabled = true
                 colorScheme = buildDarkScheme()
+                // suppress[0] = true while we're programmatically setting text to break
+                // the recomposition loop: update → setText → ContentChangeEvent → onContentChange → recompose → update
+                tag = booleanArrayOf(false)
                 setText(content)
-                subscribeAlways(io.github.rosemoe.sora.event.ContentChangeEvent::class.java) { _, _ ->
-                    onContentChange(text.toString())
+                subscribeAlways(io.github.rosemoe.sora.event.ContentChangeEvent::class.java) { _ ->
+                    val suppress = tag as? BooleanArray
+                    if (suppress == null || !suppress[0]) onContentChange(text.toString())
                 }
             }
         },
         update = { editor ->
-            // Only update if content differs to avoid cursor-jump on each keystroke
             if (editor.text.toString() != content) {
-                val sel = editor.cursor.rightLine to editor.cursor.rightColumn
+                val suppress = editor.tag as? BooleanArray
+                suppress?.set(0, true)
+                val savedLine = editor.cursor.rightLine
                 editor.setText(content)
-                runCatching {
-                    editor.setSelection(sel.first.coerceAtMost(editor.lineCount - 1), 0)
-                }
+                runCatching { editor.setSelection(savedLine.coerceAtMost(editor.lineCount - 1), 0) }
+                suppress?.set(0, false)
             }
         },
         modifier = modifier

@@ -76,6 +76,32 @@ class GitController {
         }
     }.flowOn(Dispatchers.IO)
 
+    fun pull(repoDir: File, pat: String? = null): Flow<String> = flow {
+        try {
+            Git.open(repoDir).use { git ->
+                val creds = if (pat != null) UsernamePasswordCredentialsProvider(pat, "") else null
+                val result = git.pull().apply {
+                    if (creds != null) setCredentialsProvider(creds)
+                }.call()
+                emit(if (result.isSuccessful) "Pull successful." else "Pull failed: ${result.mergeResult?.mergeStatus}")
+            }
+        } catch (e: Exception) {
+            emit("[ERROR] ${e.message}")
+        }
+    }.flowOn(Dispatchers.IO)
+
+    fun listBranches(repoDir: File): Flow<String> = flow {
+        try {
+            Git.open(repoDir).use { git ->
+                git.branchList().call().forEach { ref ->
+                    emit(ref.name.removePrefix("refs/heads/"))
+                }
+            }
+        } catch (e: Exception) {
+            emit("[ERROR] ${e.message}")
+        }
+    }.flowOn(Dispatchers.IO)
+
     fun status(repoDir: File): Flow<String> = flow {
         try {
             Git.open(repoDir).use { git ->

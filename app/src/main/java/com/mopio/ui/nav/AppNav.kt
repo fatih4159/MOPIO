@@ -12,6 +12,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.mopio.container.ContainerManager
 import com.mopio.git.GitController
+import com.mopio.phase0.Phase0Screen
 import com.mopio.ui.build.BuildConsoleScreen
 import com.mopio.ui.flash.FlashScreen
 import com.mopio.ui.git.GitScreen
@@ -28,6 +29,7 @@ object Routes {
     const val HOME     = "home"
     const val SETTINGS = "settings"
     const val MONITOR  = "monitor"
+    const val PHASE0   = "phase0"
 
     // Parameterised — encode path as URL-encoded query param to handle slashes
     fun project(projectPath: String)  = "project/${Uri.encode(projectPath)}"
@@ -127,8 +129,13 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
         composable(Routes.SETTINGS) {
             SettingsScreen(
                 container = container,
-                onBack    = { navController.popBackStack() }
+                onBack    = { navController.popBackStack() },
+                onPhase0  = { navController.navigate(Routes.PHASE0) }
             )
+        }
+
+        composable(Routes.PHASE0) {
+            Phase0Screen()
         }
     }
 }

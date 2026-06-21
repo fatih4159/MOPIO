@@ -92,7 +92,12 @@ private fun StepIndicator(steps: List<String>, current: Int) {
                 Spacer(Modifier.height(4.dp))
                 Text(label, style = MaterialTheme.typography.labelSmall, color = color)
             }
-            if (i < steps.lastIndex) HorizontalDivider(modifier = Modifier.weight(0.5f), color = MaterialTheme.colorScheme.outline)
+            if (i < steps.lastIndex) Box(
+                Modifier
+                    .weight(0.3f)
+                    .height(2.dp)
+                    .background(MaterialTheme.colorScheme.outline)
+            )
         }
     }
 }

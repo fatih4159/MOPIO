@@ -15,7 +15,7 @@ import com.mopio.container.ContainerManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(container: ContainerManager, onBack: () -> Unit) {
+fun SettingsScreen(container: ContainerManager, onBack: () -> Unit, onPhase0: () -> Unit = {}) {
     var showResetConfirm by remember { mutableStateOf(false) }
     var rootfsInfo by remember { mutableStateOf("") }
 
@@ -71,6 +71,15 @@ fun SettingsScreen(container: ContainerManager, onBack: () -> Unit) {
                     subtitle = "Compiler cache speeds up incremental builds (Phase 3 feature)",
                     tappable = false
                 )
+            }
+
+            item { Spacer(Modifier.height(8.dp)); SettingsSectionHeader("Developer") }
+            item {
+                SettingsItem(
+                    icon = Icons.Default.BugReport,
+                    title = "Hardware Spikes",
+                    subtitle = "Run Phase 0 spike tests (proot, USB, RFC2217)",
+                ) { onPhase0() }
             }
 
             item { Spacer(Modifier.height(8.dp)); SettingsSectionHeader("About") }

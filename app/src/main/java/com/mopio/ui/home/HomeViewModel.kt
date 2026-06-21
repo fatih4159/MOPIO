@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.mopio.container.ContainerManager
+import com.mopio.git.GitController
 import com.mopio.platformio.PlatformIoIniParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,12 +25,15 @@ data class ProjectSummary(
 
 data class HomeState(
     val recentProjects: List<ProjectSummary> = emptyList(),
-    val isCreating: Boolean = false
+    val isCreating: Boolean = false,
+    val cloneLog: List<String> = emptyList(),
+    val isCloning: Boolean = false
 )
 
 class HomeViewModel(
     private val context: Context,
-    private val container: ContainerManager
+    private val container: ContainerManager,
+    private val git: GitController = GitController()
 ) : ViewModel() {
 
     private val projectsRoot: File get() = File(context.filesDir, "projects")
@@ -72,6 +76,19 @@ class HomeViewModel(
     }
 
     fun refresh() = scanProjects()
+
+    fun cloneProject(url: String, name: String, pat: String?): File {
+        val dest = File(projectsRoot, name)
+        viewModelScope.launch {
+            _state.update { it.copy(isCloning = true, cloneLog = emptyList()) }
+            git.clone(url, dest, pat.takeIf { it?.isNotBlank() == true }).collect { line ->
+                _state.update { it.copy(cloneLog = it.cloneLog + line) }
+            }
+            _state.update { it.copy(isCloning = false) }
+            scanProjects()
+        }
+        return dest
+    }
 
     class Factory(private val ctx: Context, private val container: ContainerManager) :
         ViewModelProvider.Factory {

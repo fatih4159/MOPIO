@@ -6,6 +6,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
@@ -29,7 +31,9 @@ fun HomeScreen(
     val ctx = LocalContext.current
     val vm: HomeViewModel = viewModel(factory = HomeViewModel.Factory(ctx, container))
     val state by vm.state.collectAsState()
-    var showNewDialog by remember { mutableStateOf(false) }
+    var showNewDialog   by remember { mutableStateOf(false) }
+    var showCloneDialog by remember { mutableStateOf(false) }
+    var showFabMenu     by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -49,8 +53,20 @@ fun HomeScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showNewDialog = true }) {
-                Icon(Icons.Default.Add, "New project")
+            Column(horizontalAlignment = Alignment.End) {
+                if (showFabMenu) {
+                    SmallFloatingActionButton(onClick = { showFabMenu = false; showCloneDialog = true }) {
+                        Icon(Icons.Default.CloudDownload, "Clone from GitHub")
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    SmallFloatingActionButton(onClick = { showFabMenu = false; showNewDialog = true }) {
+                        Icon(Icons.Default.CreateNewFolder, "New project")
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+                FloatingActionButton(onClick = { showFabMenu = !showFabMenu }) {
+                    Icon(Icons.Default.Add, "Add")
+                }
             }
         }
     ) { padding ->
@@ -89,6 +105,17 @@ fun HomeScreen(
             onDismiss = { showNewDialog = false }
         )
     }
+
+    if (showCloneDialog) {
+        CloneDialog(
+            isCloning  = state.isCloning,
+            cloneLog   = state.cloneLog,
+            onConfirm  = { url, name, pat ->
+                vm.cloneProject(url, name, pat)
+            },
+            onDismiss  = { showCloneDialog = false }
+        )
+    }
 }
 
 @Composable
@@ -112,6 +139,67 @@ private fun ProjectCard(proj: ProjectSummary, onClick: () -> Unit) {
             }
         }
     }
+}
+
+@Composable
+private fun CloneDialog(
+    isCloning: Boolean,
+    cloneLog: List<String>,
+    onConfirm: (url: String, name: String, pat: String?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var url  by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf("") }
+    var pat  by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = { if (!isCloning) onDismiss() },
+        title = { Text("Clone from GitHub") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = {
+                        url = it
+                        if (name.isEmpty()) name = it.trimEnd('/').substringAfterLast('/').removeSuffix(".git")
+                    },
+                    label = { Text("Repository URL") },
+                    singleLine = true,
+                    enabled = !isCloning
+                )
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it.filter { c -> c.isLetterOrDigit() || c == '_' || c == '-' } },
+                    label = { Text("Local folder name") },
+                    singleLine = true,
+                    enabled = !isCloning
+                )
+                OutlinedTextField(
+                    value = pat,
+                    onValueChange = { pat = it },
+                    label = { Text("GitHub PAT (optional for public repos)") },
+                    singleLine = true,
+                    enabled = !isCloning
+                )
+                if (isCloning) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    if (cloneLog.isNotEmpty()) {
+                        Text(
+                            cloneLog.last(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(url, name, pat.takeIf { it.isNotBlank() }) },
+                enabled = url.isNotBlank() && name.isNotBlank() && !isCloning
+            ) { Text("Clone") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !isCloning) { Text("Cancel") } }
+    )
 }
 
 @Composable
