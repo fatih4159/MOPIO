@@ -1,5 +1,9 @@
 package com.mopio
 
+import android.content.Intent
+import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -9,20 +13,14 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.mopio.ui.nav.AppNav
 import com.mopio.ui.theme.MopioTheme
+import com.mopio.usb.UsbPortBroker
 
-/**
- * Single-activity host.
- *
- * Phase 0: Phase0Screen shown directly (via AppNav which routes to Phase0 when
- *          needed for hardware testing — accessible from Settings in later phases).
- * Phase 1+: [AppNav] handles all routing. Start destination is determined by whether
- *           the Linux container is already bootstrapped.
- */
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        handleUsbIntent(intent)
         setContent {
             MopioTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
@@ -30,5 +28,21 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleUsbIntent(intent)
+    }
+
+    private fun handleUsbIntent(intent: Intent?) {
+        if (intent?.action != UsbManager.ACTION_USB_DEVICE_ATTACHED) return
+        val device: UsbDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+        }
+        device?.let { UsbPortBroker.onDeviceAttached(it) }
     }
 }

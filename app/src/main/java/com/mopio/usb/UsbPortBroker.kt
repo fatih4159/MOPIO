@@ -11,6 +11,9 @@ import android.util.Log
 import com.hoho.android.usbserial.driver.UsbSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.driver.UsbSerialProber
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
@@ -98,5 +101,15 @@ class UsbPortBroker(private val context: Context) {
 
     companion object {
         private const val TAG = "UsbPortBroker"
+
+        // Written by MainActivity.onNewIntent when USB_DEVICE_ATTACHED fires.
+        // Screens can observe this to react to a newly plugged-in board.
+        private val _lastAttachedDevice = MutableStateFlow<UsbDevice?>(null)
+        val lastAttachedDevice: StateFlow<UsbDevice?> = _lastAttachedDevice.asStateFlow()
+
+        fun onDeviceAttached(device: UsbDevice) {
+            _lastAttachedDevice.value = device
+            Log.i(TAG, "USB device attached: ${device.deviceName} (${device.vendorId}:${device.productId})")
+        }
     }
 }

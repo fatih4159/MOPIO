@@ -23,6 +23,7 @@ import com.mopio.ui.theme.StatusFail
 import com.mopio.ui.theme.StatusPass
 import com.mopio.usb.UsbPortBroker
 import java.io.File
+import kotlinx.coroutines.flow.collectLatest
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,12 +39,22 @@ fun FlashScreen(
     )
     val state by vm.state.collectAsState()
     val listState = rememberLazyListState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(state.logs.size) {
         if (state.logs.isNotEmpty()) listState.animateScrollToItem(state.logs.lastIndex)
     }
 
+    LaunchedEffect(Unit) {
+        UsbPortBroker.lastAttachedDevice.collectLatest { device ->
+            if (device != null) {
+                snackbarHostState.showSnackbar("${device.productName ?: device.deviceName} connected — tap Flash")
+            }
+        }
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 navigationIcon = {

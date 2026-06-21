@@ -24,7 +24,8 @@ fun GitScreen(repoDir: File, gitCtrl: GitController, onBack: () -> Unit) {
     val vm: GitViewModel = viewModel(factory = GitViewModel.Factory(repoDir, gitCtrl))
     val state by vm.state.collectAsState()
     var showCommitDialog by remember { mutableStateOf(false) }
-    var showPushDialog by remember { mutableStateOf(false) }
+    var showPushDialog   by remember { mutableStateOf(false) }
+    var showPullDialog   by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -77,7 +78,16 @@ fun GitScreen(repoDir: File, gitCtrl: GitController, onBack: () -> Unit) {
                 ) {
                     Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Commit All")
+                    Text("Commit")
+                }
+                OutlinedButton(
+                    onClick = { showPullDialog = true },
+                    modifier = Modifier.weight(1f),
+                    enabled = !state.isBusy
+                ) {
+                    Icon(Icons.Default.Download, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Pull")
                 }
                 OutlinedButton(
                     onClick = { showPushDialog = true },
@@ -126,9 +136,21 @@ fun GitScreen(repoDir: File, gitCtrl: GitController, onBack: () -> Unit) {
     }
 
     if (showPushDialog) {
-        PushDialog(
+        PatDialog(
+            title = "Push to GitHub",
+            confirmLabel = "Push",
             onConfirm = { pat -> showPushDialog = false; vm.push(pat) },
             onDismiss = { showPushDialog = false }
+        )
+    }
+
+    if (showPullDialog) {
+        PatDialog(
+            title = "Pull from remote",
+            confirmLabel = "Pull",
+            optional = true,
+            onConfirm = { pat -> showPullDialog = false; vm.pull(pat.takeIf { it.isNotBlank() }) },
+            onDismiss = { showPullDialog = false }
         )
     }
 }
@@ -161,22 +183,37 @@ private fun CommitDialog(onConfirm: (String, String, String) -> Unit, onDismiss:
 }
 
 @Composable
-private fun PushDialog(onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
+private fun PatDialog(
+    title: String,
+    confirmLabel: String,
+    optional: Boolean = false,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
     var pat by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Push to GitHub") },
+        title = { Text(title) },
         text = {
             Column {
-                Text("Enter a GitHub Personal Access Token (PAT) with repo scope.",
-                    style = MaterialTheme.typography.bodySmall)
+                Text(
+                    if (optional) "GitHub PAT is optional for public repositories."
+                    else "Enter a GitHub Personal Access Token (PAT) with repo scope.",
+                    style = MaterialTheme.typography.bodySmall
+                )
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = pat, onValueChange = { pat = it },
-                    label = { Text("GitHub PAT") }, singleLine = true)
+                OutlinedTextField(
+                    value = pat, onValueChange = { pat = it },
+                    label = { Text(if (optional) "GitHub PAT (optional)" else "GitHub PAT") },
+                    singleLine = true
+                )
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(pat) }, enabled = pat.isNotBlank()) { Text("Push") }
+            Button(
+                onClick = { onConfirm(pat) },
+                enabled = optional || pat.isNotBlank()
+            ) { Text(confirmLabel) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )

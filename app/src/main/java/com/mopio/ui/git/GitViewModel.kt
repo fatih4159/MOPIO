@@ -45,11 +45,23 @@ class GitViewModel(private val repoDir: File, private val git: GitController) : 
 
     fun push(pat: String) {
         viewModelScope.launch {
-            _state.update { it.copy(isBusy = true) }
+            _state.update { it.copy(isBusy = true, log = emptyList()) }
             git.push(repoDir, pat).collect { line ->
                 _state.update { it.copy(log = it.log + line) }
             }
             _state.update { it.copy(isBusy = false) }
+            refreshStatus()
+        }
+    }
+
+    fun pull(pat: String?) {
+        viewModelScope.launch {
+            _state.update { it.copy(isBusy = true, log = emptyList()) }
+            git.pull(repoDir, pat.takeIf { it?.isNotBlank() == true }).collect { line ->
+                _state.update { it.copy(log = it.log + line) }
+            }
+            _state.update { it.copy(isBusy = false) }
+            refreshStatus()
         }
     }
 
