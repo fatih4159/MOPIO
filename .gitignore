@@ -1,6 +1,7 @@
-# Gradle
+# Gradle build directories (anchored to root and app module — never match source packages)
 .gradle/
-build/
+/build/
+app/build/
 *.class
 
 # Local configuration — contains SDK path, never commit
