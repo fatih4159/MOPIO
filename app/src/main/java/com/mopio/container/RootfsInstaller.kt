@@ -4,10 +4,9 @@ import android.content.Context
 import android.os.StatFs
 import android.util.Log
 import com.google.gson.JsonParser
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
@@ -15,6 +14,8 @@ import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.Paths
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
@@ -80,8 +81,8 @@ class RootfsInstaller(private val context: Context) {
         // Extract
         emit("Extracting rootfs to ${rootfsDir.absolutePath}…")
         rootfsDir.mkdirs()
-        var count = 0
-        extractTarGz(tarFile) { name, data, mode ->
+        var extractedCount = 0
+        val totalEntries = extractTarGz(tarFile) { name, data, mode ->
             val dest = File(rootfsDir, name)
             dest.parentFile?.mkdirs()
             if (data == null) {
@@ -90,14 +91,17 @@ class RootfsInstaller(private val context: Context) {
                 FileOutputStream(dest).use { it.write(data) }
                 if (mode and 0b001_001_001 != 0) dest.setExecutable(true, false)
             }
-            if (++count % 200 == 0) emit("  Extracted $count entries…")
+            if (++extractedCount % 200 == 0) emit("  Extracted $extractedCount entries…")
         }
-        emit("Extracted $count entries total")
+        emit("Extracted $totalEntries entries total")
 
         // Clean up tarball after successful extraction to free space
         tarFile.delete()
-        emit("Bootstrap complete!")
-    }.flowOn(Dispatchers.IO)
+        emit("Rootfs extracted")
+    }.catch { e ->
+            emit("[ERROR] ${e.message ?: "Unexpected error during bootstrap"}")
+            Log.e(TAG, "Bootstrap failed", e)
+        }
 
     private fun readConfig(): Pair<String, String> {
         val json = context.assets.open("rootfs_config.json")
@@ -109,7 +113,7 @@ class RootfsInstaller(private val context: Context) {
         return url to sha
     }
 
-    private fun downloadWithProgress(url: String, dest: File, onProgress: (Int) -> Unit) {
+    private suspend fun downloadWithProgress(url: String, dest: File, onProgress: suspend (Int) -> Unit) {
         val req = Request.Builder().url(url).build()
         http.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) throw IOException("HTTP ${resp.code}: $url")
@@ -134,7 +138,10 @@ class RootfsInstaller(private val context: Context) {
         }
     }
 
-    private fun extractTarGz(archive: File, onEntry: (String, ByteArray?, Int) -> Unit) {
+    private suspend fun extractTarGz(archive: File, onEntry: suspend (String, ByteArray?, Int) -> Unit): Int {
+        val pendingSymlinks = mutableListOf<Triple<String, String, Int>>() // name, linkTarget, mode
+        var count = 0
+
         TarArchiveInputStream(GzipCompressorInputStream(archive.inputStream().buffered()))
             .use { tar ->
                 var entry = tar.nextEntry
@@ -145,15 +152,38 @@ class RootfsInstaller(private val context: Context) {
                     if (entry.isDirectory) {
                         onEntry(name, null, mode)
                     } else if (entry.isSymbolicLink) {
-                        // Symlinks: create as regular file containing the link target for now
-                        // Proper symlink handling requires root or newer APIs; skip silently
+                        pendingSymlinks.add(Triple(name, entry.linkName, mode))
                     } else {
                         val data = tar.readBytes()
                         onEntry(name, data, mode)
                     }
+                    count++
                     entry = tar.nextEntry
                 }
             }
+
+        // Second pass: create symlinks now that all regular files exist.
+        // This fixes the case where symlink creation fails on Android's /data
+        // partition because the target file hasn't been extracted yet.
+        for ((name, linkTarget, mode) in pendingSymlinks) {
+            val dest = File(rootfsDir, name)
+            dest.parentFile?.mkdirs()
+            try {
+                Files.createSymbolicLink(dest.toPath(), Paths.get(linkTarget))
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to create symlink $name -> $linkTarget: ${e.message}")
+                val targetFile = File(rootfsDir, linkTarget)
+                if (targetFile.isFile) {
+                    targetFile.copyTo(dest, overwrite = false)
+                    if (targetFile.canExecute()) dest.setExecutable(true, false)
+                } else {
+                    // Still can't resolve it — write target as text (last resort)
+                    dest.writeText(linkTarget)
+                }
+            }
+        }
+
+        return count
     }
 
     private fun sha256Hex(file: File): String {

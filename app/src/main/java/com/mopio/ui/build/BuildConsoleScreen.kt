@@ -14,6 +14,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,6 +39,7 @@ fun BuildConsoleScreen(
     val state by vm.state.collectAsState()
     val listState = rememberLazyListState()
     var autoScroll by remember { mutableStateOf(true) }
+    val clipboard = LocalClipboardManager.current
 
     LaunchedEffect(state.lines.size) {
         if (autoScroll && state.lines.isNotEmpty()) {
@@ -57,6 +60,21 @@ fun BuildConsoleScreen(
                 },
                 title = { Text("Build — ${projectDir.name}") },
                 actions = {
+                    IconButton(onClick = {
+                        val text = buildString {
+                            state.lines.forEach { appendLine(it.text) }
+                            if (state.errors.isNotEmpty()) {
+                                appendLine()
+                                appendLine("--- Issues ---")
+                                state.errors.forEach { d ->
+                                    appendLine("${if (d.isError) "ERROR" else "WARNING"} ${d.file}:${d.line}: ${d.message}")
+                                }
+                            }
+                        }
+                        clipboard.setText(AnnotatedString(text))
+                    }) {
+                        Icon(Icons.Default.ContentCopy, "Copy log")
+                    }
                     IconButton(onClick = { autoScroll = !autoScroll }) {
                         Icon(
                             if (autoScroll) Icons.Default.VerticalAlignBottom else Icons.Default.LockOpen,

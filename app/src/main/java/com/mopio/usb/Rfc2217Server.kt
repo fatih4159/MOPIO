@@ -6,6 +6,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.IOException
@@ -56,7 +57,7 @@ class Rfc2217Server(private val serialPort: UsbSerialPort) {
     // ── Accept loop ──────────────────────────────────────────────────────────
 
     private suspend fun acceptLoop(ss: ServerSocket) {
-        while (isActive) {
+        while (coroutineContext.isActive) {
             val client = try { ss.accept() } catch (e: IOException) { break }
             Log.d(TAG, "Client connected: ${client.inetAddress.hostAddress}")
             handleClient(client)
@@ -88,7 +89,7 @@ class Rfc2217Server(private val serialPort: UsbSerialPort) {
 
     private suspend fun usbToTcpRelay(out: OutputStream) {
         val buf = ByteArray(USB_BUF)
-        while (isActive) {
+        while (coroutineContext.isActive) {
             val n = try {
                 serialPort.read(buf, USB_READ_TIMEOUT_MS)
             } catch (e: IOException) {

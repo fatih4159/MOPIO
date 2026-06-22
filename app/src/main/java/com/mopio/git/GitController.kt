@@ -3,6 +3,7 @@ package com.mopio.git
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import org.eclipse.jgit.api.Git
@@ -21,27 +22,27 @@ class GitController {
     fun clone(url: String, destDir: File, pat: String? = null): Flow<String> = flow {
         emit("Cloning $url")
         emit("→ ${destDir.absolutePath}")
-        try {
-            val creds = if (pat != null)
-                UsernamePasswordCredentialsProvider(pat, "") else null
-            // Collect progress into a list (JGit monitor callbacks are not suspendable)
-            val progress = mutableListOf<String>()
-            Git.cloneRepository()
-                .setURI(url)
-                .setDirectory(destDir)
-                .setCloneAllBranches(false)
-                .apply { if (creds != null) setCredentialsProvider(creds) }
-                .setProgressMonitor(LoggingMonitor { progress.add(it) })
-                .call()
-                .close()
-            progress.forEach { emit(it) }
-            emit("Clone complete.")
-        } catch (e: TransportException) {
-            emit("[ERROR] Transport: ${e.message}")
-        } catch (e: Exception) {
-            emit("[ERROR] ${e.javaClass.simpleName}: ${e.message}")
-        }
+        val creds = if (pat != null)
+            UsernamePasswordCredentialsProvider(pat, "") else null
+        // Collect progress into a list (JGit monitor callbacks are not suspendable)
+        val progress = mutableListOf<String>()
+        Git.cloneRepository()
+            .setURI(url)
+            .setDirectory(destDir)
+            .setCloneAllBranches(false)
+            .apply { if (creds != null) setCredentialsProvider(creds) }
+            .setProgressMonitor(LoggingMonitor { progress.add(it) })
+            .call()
+            .close()
+        progress.forEach { emit(it) }
+        emit("Clone complete.")
     }.flowOn(Dispatchers.IO)
+        .catch { e ->
+            when (e) {
+                is TransportException -> emit("[ERROR] Transport: ${e.message}")
+                else -> emit("[ERROR] ${e.javaClass.simpleName}: ${e.message}")
+            }
+        }
 
     fun addAndCommit(
         repoDir: File,
@@ -49,74 +50,59 @@ class GitController {
         authorName: String,
         authorEmail: String
     ): Flow<String> = flow {
-        try {
-            Git.open(repoDir).use { git ->
-                git.add().addFilepattern(".").call()
-                val rev = git.commit()
-                    .setMessage(message)
-                    .setAuthor(authorName, authorEmail)
-                    .call()
-                emit("Committed ${rev.name.take(8)}: $message")
-            }
-        } catch (e: Exception) {
-            emit("[ERROR] ${e.message}")
+        Git.open(repoDir).use { git ->
+            git.add().addFilepattern(".").call()
+            val rev = git.commit()
+                .setMessage(message)
+                .setAuthor(authorName, authorEmail)
+                .call()
+            emit("Committed ${rev.name.take(8)}: $message")
         }
     }.flowOn(Dispatchers.IO)
+        .catch { e -> emit("[ERROR] ${e.message}") }
 
     fun push(repoDir: File, pat: String): Flow<String> = flow {
-        try {
-            Git.open(repoDir).use { git ->
-                val creds = UsernamePasswordCredentialsProvider(pat, "")
-                git.push().setCredentialsProvider(creds).call().forEach { r ->
-                    emit("Push ${r.uri}: ${r.messages}")
-                }
+        Git.open(repoDir).use { git ->
+            val creds = UsernamePasswordCredentialsProvider(pat, "")
+            git.push().setCredentialsProvider(creds).call().forEach { r ->
+                emit("Push ${r.uri}: ${r.messages}")
             }
-        } catch (e: Exception) {
-            emit("[ERROR] ${e.message}")
         }
     }.flowOn(Dispatchers.IO)
+        .catch { e -> emit("[ERROR] ${e.message}") }
 
     fun pull(repoDir: File, pat: String? = null): Flow<String> = flow {
-        try {
-            Git.open(repoDir).use { git ->
-                val creds = if (pat != null) UsernamePasswordCredentialsProvider(pat, "") else null
-                val result = git.pull().apply {
-                    if (creds != null) setCredentialsProvider(creds)
-                }.call()
-                emit(if (result.isSuccessful) "Pull successful." else "Pull failed: ${result.mergeResult?.mergeStatus}")
-            }
-        } catch (e: Exception) {
-            emit("[ERROR] ${e.message}")
+        Git.open(repoDir).use { git ->
+            val creds = if (pat != null) UsernamePasswordCredentialsProvider(pat, "") else null
+            val result = git.pull().apply {
+                if (creds != null) setCredentialsProvider(creds)
+            }.call()
+            emit(if (result.isSuccessful) "Pull successful." else "Pull failed: ${result.mergeResult?.mergeStatus}")
         }
     }.flowOn(Dispatchers.IO)
+        .catch { e -> emit("[ERROR] ${e.message}") }
 
     fun listBranches(repoDir: File): Flow<String> = flow {
-        try {
-            Git.open(repoDir).use { git ->
-                git.branchList().call().forEach { ref ->
-                    emit(ref.name.removePrefix("refs/heads/"))
-                }
+        Git.open(repoDir).use { git ->
+            git.branchList().call().forEach { ref ->
+                emit(ref.name.removePrefix("refs/heads/"))
             }
-        } catch (e: Exception) {
-            emit("[ERROR] ${e.message}")
         }
     }.flowOn(Dispatchers.IO)
+        .catch { e -> emit("[ERROR] ${e.message}") }
 
     fun status(repoDir: File): Flow<String> = flow {
-        try {
-            Git.open(repoDir).use { git ->
-                val s = git.status().call()
-                if (s.isClean) { emit("Working tree clean"); return@flow }
-                s.added.forEach    { emit("A  $it") }
-                s.changed.forEach  { emit("M  $it") }
-                s.removed.forEach  { emit("D  $it") }
-                s.untracked.forEach{ emit("?? $it") }
-                s.modified.forEach { emit("M  $it (unstaged)") }
-            }
-        } catch (e: Exception) {
-            emit("[ERROR] ${e.message}")
+        Git.open(repoDir).use { git ->
+            val s = git.status().call()
+            if (s.isClean) { emit("Working tree clean"); return@flow }
+            s.added.forEach    { emit("A  $it") }
+            s.changed.forEach  { emit("M  $it") }
+            s.removed.forEach  { emit("D  $it") }
+            s.untracked.forEach{ emit("?? $it") }
+            s.modified.forEach { emit("M  $it (unstaged)") }
         }
     }.flowOn(Dispatchers.IO)
+        .catch { e -> emit("[ERROR] ${e.message}") }
 
     private class LoggingMonitor(private val onLine: (String) -> Unit) : ProgressMonitor {
         private var task = ""

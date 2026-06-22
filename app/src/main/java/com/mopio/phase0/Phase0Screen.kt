@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Circle
 import androidx.compose.material3.*
@@ -15,7 +16,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -88,6 +91,7 @@ private fun SpikeCard(spike: SpikeState, onRun: () -> Unit) {
     LaunchedEffect(spike.logs.size) {
         if (spike.logs.isNotEmpty()) logListState.animateScrollToItem(spike.logs.lastIndex)
     }
+    val clipboard = LocalClipboardManager.current
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -102,6 +106,13 @@ private fun SpikeCard(spike: SpikeState, onRun: () -> Unit) {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+                if (spike.logs.isNotEmpty()) {
+                    IconButton(onClick = {
+                        clipboard.setText(AnnotatedString(spike.logs.joinToString("\n")))
+                    }) {
+                        Icon(Icons.Default.ContentCopy, "Copy log", modifier = Modifier.size(20.dp))
+                    }
                 }
                 OutlinedButton(
                     onClick = onRun,

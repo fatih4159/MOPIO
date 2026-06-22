@@ -15,7 +15,6 @@ android {
         versionCode     = 1
         versionName     = "0.1.0-phase0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        ndk { abiFilters += "arm64-v8a" }
     }
 
     buildTypes {
@@ -30,6 +29,7 @@ android {
     }
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -58,11 +58,13 @@ android {
             pickFirsts += "META-INF/NOTICE"
             pickFirsts += "META-INF/LICENSE.md"
             pickFirsts += "META-INF/NOTICE.md"
+            pickFirsts += "OSGI-INF/l10n/plugin.properties"
         }
     }
 }
 
 dependencies {
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime)
     implementation(libs.androidx.activity.compose)

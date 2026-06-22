@@ -12,6 +12,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,6 +42,7 @@ fun FlashScreen(
     val state by vm.state.collectAsState()
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val clipboard = LocalClipboardManager.current
 
     LaunchedEffect(state.logs.size) {
         if (state.logs.isNotEmpty()) listState.animateScrollToItem(state.logs.lastIndex)
@@ -61,6 +64,17 @@ fun FlashScreen(
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
                 },
                 title = { Text("Flash — ${projectDir.name}") },
+                actions = {
+                    IconButton(onClick = {
+                        val text = buildString {
+                            state.logs.forEach { appendLine(it) }
+                            state.error?.let { appendLine(); appendLine("Error: $it") }
+                        }
+                        clipboard.setText(AnnotatedString(text))
+                    }) {
+                        Icon(Icons.Default.ContentCopy, "Copy log")
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 )

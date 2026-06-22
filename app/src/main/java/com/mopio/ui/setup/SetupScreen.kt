@@ -8,12 +8,15 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -164,8 +167,22 @@ private fun BootstrapStep(state: SetupState) {
     LaunchedEffect(state.bootstrapLogs.size) {
         if (state.bootstrapLogs.isNotEmpty()) listState.animateScrollToItem(state.bootstrapLogs.lastIndex)
     }
+    val clipboard = LocalClipboardManager.current
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text("Installing Rootfs", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Installing Rootfs", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            if (state.bootstrapLogs.isNotEmpty()) {
+                IconButton(onClick = {
+                    val text = buildString {
+                        state.bootstrapLogs.forEach { appendLine(it) }
+                        state.error?.let { appendLine(); appendLine("Error: $it") }
+                    }
+                    clipboard.setText(AnnotatedString(text))
+                }) {
+                    Icon(Icons.Default.ContentCopy, "Copy log")
+                }
+            }
+        }
         Spacer(Modifier.height(4.dp))
         Text("Downloading Debian aarch64 rootfs and PlatformIO…", style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(8.dp))

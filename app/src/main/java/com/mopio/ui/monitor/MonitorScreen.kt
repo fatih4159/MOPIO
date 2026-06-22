@@ -13,6 +13,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,6 +30,7 @@ fun MonitorScreen(usbBroker: UsbPortBroker, onBack: () -> Unit) {
     val state by vm.state.collectAsState()
     val listState = rememberLazyListState()
     var sendText by remember { mutableStateOf("") }
+    val clipboard = LocalClipboardManager.current
 
     LaunchedEffect(state.lines.size) {
         if (state.autoScroll && state.lines.isNotEmpty()) {
@@ -83,6 +86,16 @@ fun MonitorScreen(usbBroker: UsbPortBroker, onBack: () -> Unit) {
                                    else MaterialTheme.colorScheme.onSurface
                         )
                     }
+                    IconButton(onClick = {
+                        val text = buildString {
+                            if (state.error != null) { appendLine(state.error); appendLine() }
+                            state.lines.forEach { line ->
+                                if (state.showTimestamps) append("${line.timestamp}  ")
+                                appendLine(line.text)
+                            }
+                        }
+                        clipboard.setText(AnnotatedString(text))
+                    }) { Icon(Icons.Default.ContentCopy, "Copy log") }
                     IconButton(onClick = { vm.clear() }) { Icon(Icons.Default.ClearAll, "Clear") }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

@@ -45,14 +45,18 @@ class SetupViewModel(private val container: ContainerManager) : ViewModel() {
     fun startBootstrap() {
         _state.update { it.copy(step = SetupStep.BOOTSTRAP, bootstrapLogs = emptyList(), error = null) }
         viewModelScope.launch {
-            container.bootstrap().collect { line ->
-                _state.update { it.copy(bootstrapLogs = it.bootstrapLogs + line) }
-                if (line == "Bootstrap complete!") {
-                    _state.update { it.copy(bootstrapDone = true, step = SetupStep.DONE) }
+            try {
+                container.bootstrap().collect { line ->
+                    _state.update { it.copy(bootstrapLogs = it.bootstrapLogs + line) }
+                    if (line == "Bootstrap complete!") {
+                        _state.update { it.copy(bootstrapDone = true, step = SetupStep.DONE) }
+                    }
+                    if (line.startsWith("[ERROR]")) {
+                        _state.update { it.copy(error = line) }
+                    }
                 }
-                if (line.startsWith("[ERROR]")) {
-                    _state.update { it.copy(error = line) }
-                }
+            } catch (e: Exception) {
+                _state.update { it.copy(error = "[ERROR] ${e.message}") }
             }
         }
     }

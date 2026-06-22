@@ -10,6 +10,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -26,6 +28,7 @@ fun GitScreen(repoDir: File, gitCtrl: GitController, onBack: () -> Unit) {
     var showCommitDialog by remember { mutableStateOf(false) }
     var showPushDialog   by remember { mutableStateOf(false) }
     var showPullDialog   by remember { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
 
     Scaffold(
         topBar = {
@@ -35,6 +38,13 @@ fun GitScreen(repoDir: File, gitCtrl: GitController, onBack: () -> Unit) {
                 },
                 title = { Text("Git — ${repoDir.name}") },
                 actions = {
+                    if (state.log.isNotEmpty()) {
+                        IconButton(onClick = {
+                            clipboard.setText(AnnotatedString(state.log.joinToString("\n")))
+                        }) {
+                            Icon(Icons.Default.ContentCopy, "Copy log")
+                        }
+                    }
                     IconButton(onClick = { vm.refreshStatus() }) {
                         Icon(Icons.Default.Refresh, "Refresh")
                     }

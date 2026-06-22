@@ -1,11 +1,12 @@
 {
   "_comment": "Runtime config for the glibc rootfs bootstrap. Edited by Phase 1 ContainerManager.",
-  "rootfs_url": "https://github.com/termux/termux-docker/releases/download/main/aarch64.tar.gz",
-  "rootfs_sha256": "",
-  "rootfs_size_bytes": 0,
+  "rootfs_url": "https://raw.githubusercontent.com/debuerreotype/docker-debian-artifacts/refs/heads/dist-arm64v8/bookworm/oci/blobs/rootfs.tar.gz",
+  "rootfs_sha256": "c847f328095fb083f4a22895b90fe4226efa6458ac57362b64b6e5d99da9e4a3",
+  "rootfs_size_bytes": 48389016,
   "proot_version": "5.4.0",
   "platformio_version": "latest",
   "notes": [
+    "Official Debian bookworm aarch64 rootfs from debuerreotype (Apache-2.0).",
     "proot binary must be placed as app/src/main/jniLibs/arm64-v8a/libproot.so",
     "Build proot from https://github.com/proot-me/proot (static aarch64 build)",
     "Or use the Termux-packaged static proot: pkg install proot; cp $(which proot) libproot.so"

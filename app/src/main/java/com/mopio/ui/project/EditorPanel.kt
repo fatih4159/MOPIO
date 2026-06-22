@@ -21,7 +21,7 @@ fun EditorPanel(
     AndroidView(
         factory = { ctx ->
             CodeEditor(ctx).apply {
-                setTypeface(Typeface.MONOSPACE)
+                typefaceText = Typeface.MONOSPACE
                 isWordwrap = false
                 isLineNumberEnabled = true
                 colorScheme = buildDarkScheme()
