@@ -12,6 +12,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.Paths
 
 /**
  * Manages the proot-based glibc Linux container used for all PlatformIO operations.
@@ -40,14 +42,40 @@ class ContainerManager(private val context: Context) {
     val isProotAvailable: Boolean
         get() = prootBin.exists()
 
+    // ── Shared proot argument builder ────────────────────────────────────────
+
+    /**
+     * Returns the fixed proot flags required on Android:
+     *  --link2symlink : proot resolves symlinks internally; avoids issues where
+     *                   the extractor fallback wrote a text file instead of a symlink.
+     *  -0             : Fake UID/GID 0 so apt-get / pip / dpkg believe they run as root.
+     */
+    private fun prootBaseArgs(): List<String> = listOf(
+        prootBin.absolutePath,
+        "--rootfs=${rootfsDir.absolutePath}",
+        "--link2symlink",
+        "-0",
+        "--bind=/proc",
+        "--bind=/dev",
+        "--bind=/sys",
+        "--bind=/dev/urandom:/dev/random"
+    )
+
+    /** Environment variables shared by both exec() and runInProot(). */
+    private fun prootBaseEnv(): Map<String, String> = mapOf(
+        "HOME"             to "/root",
+        "TERM"             to "xterm-256color",
+        "LANG"             to "C.UTF-8",
+        "PROOT_TMP_DIR"    to prootTmpDir.absolutePath,
+        // Disable seccomp acceleration — avoids crashes on some Android kernels.
+        "PROOT_NO_SECCOMP" to "1"
+    )
+
     // ── Command execution ────────────────────────────────────────────────────
 
     /**
      * Run a shell command inside the proot container.
      * Emits stdout+stderr lines followed by "[EXIT <code>]".
-     *
-     * Environment mirrors what PlatformIO expects (HOME, PATH, PLATFORMIO_CORE_DIR).
-     * The project dir, if supplied, is bind-mounted into /workspace inside the container.
      */
     fun exec(
         cmd: String,
@@ -69,15 +97,8 @@ class ContainerManager(private val context: Context) {
         platformioDir.mkdirs()
 
         val args = buildList {
-            add(prootBin.absolutePath)
-            add("--rootfs=${rootfsDir.absolutePath}")
-            // Core filesystem bindings
-            add("--bind=/proc")
-            add("--bind=/dev")
-            add("--bind=/sys")
-            // PlatformIO data dir bind-mounted at a fixed in-container path
+            addAll(prootBaseArgs())
             add("--bind=${platformioDir.absolutePath}:/data/platformio")
-            // Optional: bind the host project directory into the container
             if (projectDir != null && projectDir.exists()) {
                 add("--bind=${projectDir.absolutePath}:/workspace")
             }
@@ -87,12 +108,9 @@ class ContainerManager(private val context: Context) {
         }
 
         val env = buildMap {
-            put("HOME", "/root")
+            putAll(prootBaseEnv())
             put("PATH", "/root/.platformio/penv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
             put("PLATFORMIO_CORE_DIR", "/data/platformio")
-            put("TERM", "xterm-256color")
-            put("LANG", "C.UTF-8")
-            put("PROOT_TMP_DIR", prootTmpDir.absolutePath)
             putAll(extraEnv)
         }
 
@@ -124,14 +142,9 @@ class ContainerManager(private val context: Context) {
 
     // ── proot availability probe ─────────────────────────────────────────────
 
-    /**
-     * Tries to execute proot --version to verify the OS hasn't blocked it (Reality #3).
-     * Returns true only if exec succeeds with exit 0.
-     */
     suspend fun checkProotExecutable(): Boolean = withContext(Dispatchers.IO) {
         if (!prootBin.exists()) return@withContext false
         try {
-            // proot --version exits 0 and prints version info
             val p = ProcessBuilder(prootBin.absolutePath, "--version")
                 .redirectErrorStream(true)
                 .start()
@@ -147,11 +160,6 @@ class ContainerManager(private val context: Context) {
 
     // ── Bootstrap (Phase 1) ──────────────────────────────────────────────────
 
-    /**
-     * Download and extract the Debian aarch64 rootfs (idempotent).
-     * Delegates to [RootfsInstaller] for download + Commons Compress extraction.
-     * Emits progress lines suitable for display in the setup wizard.
-     */
     fun bootstrap(): Flow<String> = flow {
         emit("proot available: $isProotAvailable")
         if (isBootstrapped) {
@@ -164,12 +172,9 @@ class ContainerManager(private val context: Context) {
         }
         emitAll(RootfsInstaller(context).install())
 
-        // Fix up critical symlinks/binary permissions in case the filesystem
-        // does not support symlinks (common on Android /data partitions).
+        emit("Fixing merged-usr symlinks and permissions…")
         fixupRootfs()
 
-        // The minimal Debian rootfs does not include python3.
-        // Install it now so pip3 / PlatformIO work later.
         if (!File(rootfsDir, "usr/bin/python3").exists()) {
             emit("Setting up rootfs networking and apt sources…")
             val setupCode = runInProot(
@@ -192,10 +197,8 @@ class ContainerManager(private val context: Context) {
             ) { line -> emit("  $line") }
             if (code != 0) {
                 emit("[ERROR] python3 installation failed (exit $code)")
-                emit("See lines above for apt errors. Common causes:")
-                emit("  - No network inside proot (check /etc/resolv.conf)")  
+                emit("  - No network inside proot (check /etc/resolv.conf)")
                 emit("  - Missing apt sources.list")
-                emit("  - Check /data/user/0/com.mopio.debug/files/rootfs/etc/apt/sources.list")
                 return@flow
             }
             emit("python3 installed")
@@ -203,37 +206,25 @@ class ContainerManager(private val context: Context) {
         emit("Bootstrap complete!")
     }.flowOn(Dispatchers.IO)
 
-    /**
-     * Run a shell command inside the container without requiring [isBootstrapped].
-     * Used during bootstrap before python3 is available.
-     * Returns the exit code.
-     */
+    // ── Internal proot runner (pre-bootstrap) ────────────────────────────────
+
     private suspend fun runInProot(cmd: String, onLine: (suspend (String) -> Unit)? = null): Int = coroutineScope {
         val args = buildList {
-            add(prootBin.absolutePath)
-            add("--rootfs=${rootfsDir.absolutePath}")
-            add("--bind=/proc")
-            add("--bind=/dev")
-            add("--bind=/sys")
+            addAll(prootBaseArgs())
             add("/bin/sh")
             add("-c")
             add(cmd)
+        }
+        val env = buildMap {
+            putAll(prootBaseEnv())
+            put("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+            put("DEBIAN_FRONTEND", "noninteractive")
         }
         Log.d(TAG, "runInProot: ${args.joinToString(" ")}")
         try {
             val p = ProcessBuilder(args)
                 .redirectErrorStream(true)
-                .also { pb ->
-                    pb.environment().putAll(
-                        mapOf(
-                            "HOME" to "/root",
-                            "PATH" to "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-                            "TERM" to "xterm-256color",
-                            "LANG" to "C.UTF-8",
-                            "PROOT_TMP_DIR" to prootTmpDir.absolutePath
-                        )
-                    )
-                }
+                .also { pb -> pb.environment().putAll(env) }
                 .start()
             p.inputStream.bufferedReader().use { reader ->
                 var line = reader.readLine()
@@ -250,78 +241,102 @@ class ContainerManager(private val context: Context) {
         }
     }
 
+    // ── Post-extraction fixup ────────────────────────────────────────────────
+
     /**
-     * Post-extraction fixup: ensures critical binaries (shell, dynamic linker)
-     * exist and are executable. Android's /data partition often disallows
-     * symlinks, so symlinks in the rootfs may have been replaced with text
-     * files or copies that lack proper permissions.
+     * Debian Bookworm uses a merged-usr layout: /bin, /lib, /lib64, /sbin are
+     * symlinks into /usr. The tar extractor's fallback (when Files.createSymbolicLink
+     * fails) writes the link target as a plain text file. This method detects those
+     * text files and recreates them as real symlinks, then ensures the shell and the
+     * dynamic linker are executable.
      */
     private fun fixupRootfs() {
-        val candidates = listOf("bin/sh", "usr/bin/sh", "bin/dash", "usr/bin/dash", "bin/bash", "usr/bin/bash")
+        // Recreate merged-usr directory symlinks if they were stored as text files.
+        val mergedUsrLinks = mapOf(
+            "bin"   to "usr/bin",
+            "lib"   to "usr/lib",
+            "lib64" to "usr/lib",
+            "sbin"  to "usr/sbin"
+        )
+        for ((name, target) in mergedUsrLinks) {
+            val link      = File(rootfsDir, name)
+            val targetDir = File(rootfsDir, target)
+            if (!targetDir.isDirectory) continue  // target doesn't exist yet
 
-        // Find any working shell binary
+            val isRealSymlink = try {
+                Files.isSymbolicLink(link.toPath())
+            } catch (_: Exception) { false }
+
+            if (link.isDirectory) continue        // already a real dir (shouldn't happen, but safe)
+
+            if (!isRealSymlink) {
+                // Text-file fallback or missing — recreate as a proper symlink.
+                link.delete()
+                try {
+                    Files.createSymbolicLink(link.toPath(), Paths.get(target))
+                    Log.d(TAG, "fixupRootfs: created $name -> $target")
+                } catch (e: Exception) {
+                    Log.w(TAG, "fixupRootfs: cannot symlink $name -> $target: ${e.message}")
+                }
+            }
+        }
+
+        // Locate a working shell binary (dash preferred, bash as fallback).
+        val shellCandidates = listOf(
+            "usr/bin/dash", "bin/dash",
+            "usr/bin/bash", "bin/bash"
+        )
         var shellBin: File? = null
-        for (rel in candidates) {
+        for (rel in shellCandidates) {
             val f = File(rootfsDir, rel)
-            if (f.isFile && f.canExecute()) {
+            if (f.isFile) {
+                if (!f.canExecute()) f.setExecutable(true, false)
                 shellBin = f
                 break
             }
         }
 
-        // If no shell is executable, search more broadly
-        if (shellBin == null) {
-            shellBin = File(rootfsDir, "usr/bin/dash")
-            if (!shellBin.isFile) shellBin = File(rootfsDir, "bin/dash")
-            if (!shellBin.isFile) shellBin = File(rootfsDir, "usr/bin/bash")
-            if (!shellBin.isFile) shellBin = File(rootfsDir, "bin/bash")
-            if (shellBin!!.isFile) {
-                shellBin!!.setExecutable(true, false)
-            } else {
-                shellBin = null
-            }
-        }
-
-        // Ensure /bin/sh and /usr/bin/sh point to a working shell
+        // Ensure /bin/sh and /usr/bin/sh exist and are executable.
         if (shellBin != null) {
-            for (shPath in listOf("bin/sh", "usr/bin/sh")) {
+            for (shPath in listOf("usr/bin/sh", "bin/sh")) {
                 val shFile = File(rootfsDir, shPath)
-                if (!shFile.exists() || !shFile.canExecute()) {
+                if (!shFile.exists() || (!shFile.canExecute() && !Files.isSymbolicLink(shFile.toPath()))) {
                     shFile.parentFile?.mkdirs()
-                    shellBin.copyTo(shFile, overwrite = true)
-                    shFile.setExecutable(true, false)
+                    try {
+                        shellBin.copyTo(shFile, overwrite = true)
+                        shFile.setExecutable(true, false)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "fixupRootfs: cannot copy shell to $shPath: ${e.message}")
+                    }
                 }
             }
         }
 
-        // Ensure the dynamic linker exists and is executable
-        val ldLinks = listOf(
-            "lib/ld-linux-aarch64.so.1",
+        // Ensure the aarch64 dynamic linker is executable.
+        val ldCandidates = listOf(
+            "usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1",
             "lib/aarch64-linux-gnu/ld-linux-aarch64.so.1",
-            "usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+            "lib/ld-linux-aarch64.so.1"
         )
-        for (rel in ldLinks) {
+        for (rel in ldCandidates) {
             val ld = File(rootfsDir, rel)
-            if (ld.isFile && ld.canExecute()) break
-            if (ld.isFile && !ld.canExecute()) {
-                ld.setExecutable(true, false)
+            if (ld.isFile) {
+                if (!ld.canExecute()) ld.setExecutable(true, false)
+                break
             }
         }
     }
 
     // ── PlatformIO helpers ───────────────────────────────────────────────────
 
-    /** Install PlatformIO via pip3 inside the container. */
     fun installPlatformIO(): Flow<String> =
         exec("pip3 install --quiet --upgrade platformio && pio --version")
 
-    /** Stream `pio run -e <env>` from the given project directory. */
     fun pioBuild(projectDir: File, env: String? = null): Flow<String> {
         val envFlag = if (env != null) "-e $env" else ""
         return exec("cd /workspace && pio run $envFlag 2>&1", projectDir = projectDir)
     }
 
-    /** Stream `pio run -e <env> -t upload --upload-port <port>`. */
     fun pioUpload(projectDir: File, env: String? = null, uploadPort: String): Flow<String> {
         val envFlag = if (env != null) "-e $env" else ""
         return exec(
