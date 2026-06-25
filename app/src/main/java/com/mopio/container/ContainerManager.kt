@@ -36,6 +36,32 @@ class ContainerManager(private val context: Context) {
     private val prootBin: File
         get() = File(context.applicationInfo.nativeLibraryDir, "libproot.so")
 
+    /**
+     * Directory holding soname symlinks that the Android dynamic linker needs when loading
+     * Termux's proot binary.
+     *
+     * Termux bundles libtalloc as libtalloc.so (Android only installs lib*.so from jniLibs),
+     * but proot's DT_NEEDED entry says "libtalloc.so.2".  /system/bin/linker64 looks for the
+     * exact filename, so we create a libtalloc.so.2 symlink here and add this directory to
+     * LD_LIBRARY_PATH so the linker finds it.
+     */
+    private val extraLibsDir: File
+        get() {
+            val dir = File(context.filesDir, "proot-libs")
+            dir.mkdirs()
+            val talloc2 = File(dir, "libtalloc.so.2")
+            val tallocReal = File(context.applicationInfo.nativeLibraryDir, "libtalloc.so")
+            if (!Files.isSymbolicLink(talloc2.toPath()) && tallocReal.exists()) {
+                talloc2.delete()
+                try {
+                    Files.createSymbolicLink(talloc2.toPath(), tallocReal.toPath())
+                } catch (e: Exception) {
+                    Log.w(TAG, "extraLibsDir: cannot create libtalloc.so.2 symlink: ${e.message}")
+                }
+            }
+            return dir
+        }
+
     val isBootstrapped: Boolean
         get() = File(rootfsDir, "bin/bash").exists() && File(rootfsDir, "usr/bin/python3").exists()
 
@@ -62,14 +88,23 @@ class ContainerManager(private val context: Context) {
     )
 
     /** Environment variables shared by both exec() and runInProot(). */
-    private fun prootBaseEnv(): Map<String, String> = mapOf(
-        "HOME"             to "/root",
-        "TERM"             to "xterm-256color",
-        "LANG"             to "C.UTF-8",
-        "PROOT_TMP_DIR"    to prootTmpDir.absolutePath,
-        // Disable seccomp acceleration — avoids crashes on some Android kernels.
-        "PROOT_NO_SECCOMP" to "1"
-    )
+    private fun prootBaseEnv(): Map<String, String> {
+        val nativeDir = context.applicationInfo.nativeLibraryDir
+        return mapOf(
+            "HOME"             to "/root",
+            "TERM"             to "xterm-256color",
+            "LANG"             to "C.UTF-8",
+            "PROOT_TMP_DIR"    to prootTmpDir.absolutePath,
+            // Disable seccomp acceleration — avoids crashes on some Android kernels.
+            "PROOT_NO_SECCOMP" to "1",
+            // Termux's proot acts as its own loader (self-as-loader mode).
+            "PROOT_LOADER"     to prootBin.absolutePath,
+            // Allow /system/bin/linker64 to find libtalloc.so.2 and libandroid-shmem.so
+            // which live in nativeLibraryDir.  extraLibsDir holds the libtalloc.so.2
+            // soname symlink because Android only installs lib*.so (no .so.2 suffix).
+            "LD_LIBRARY_PATH"  to "${extraLibsDir.absolutePath}:$nativeDir"
+        )
+    }
 
     // ── Command execution ────────────────────────────────────────────────────
 

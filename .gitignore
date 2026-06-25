@@ -34,6 +34,8 @@ google-services.json
 # Profiling
 *.hprof
 
-# The actual proot binary is a binary blob; commit only the README placeholder.
-# Obtain via: ./scripts/get_proot.sh
+# Native library binaries are binary blobs; commit only the README placeholder.
+# Obtain all three via: ./scripts/get_proot.sh
 app/src/main/jniLibs/arm64-v8a/libproot.so
+app/src/main/jniLibs/arm64-v8a/libtalloc.so
+app/src/main/jniLibs/arm64-v8a/libandroid-shmem.so
