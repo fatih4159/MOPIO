@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.mopio.container.ContainerManager
 import com.mopio.git.GitController
+import com.mopio.git.PatStorage
 import com.mopio.platformio.PlatformIoIniParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,12 +28,14 @@ data class HomeState(
     val recentProjects: List<ProjectSummary> = emptyList(),
     val isCreating: Boolean = false,
     val cloneLog: List<String> = emptyList(),
-    val isCloning: Boolean = false
+    val isCloning: Boolean = false,
+    val hasSavedPat: Boolean = false
 )
 
 class HomeViewModel(
     private val context: Context,
     private val container: ContainerManager,
+    private val patStorage: PatStorage,
     private val git: GitController = GitController()
 ) : ViewModel() {
 
@@ -40,7 +43,10 @@ class HomeViewModel(
     private val _state = MutableStateFlow(HomeState())
     val state: StateFlow<HomeState> = _state.asStateFlow()
 
-    init { scanProjects() }
+    init {
+        scanProjects()
+        _state.update { it.copy(hasSavedPat = patStorage.loadPat() != null) }
+    }
 
     private fun scanProjects() {
         viewModelScope.launch {
@@ -77,11 +83,17 @@ class HomeViewModel(
 
     fun refresh() = scanProjects()
 
-    fun cloneProject(url: String, name: String, pat: String?): File {
+    fun cloneProject(url: String, name: String, pat: String?, savePat: Boolean = false): File {
         val dest = File(projectsRoot, name)
+        // Use explicitly provided PAT first, fall back to stored one
+        val token = pat?.takeIf { it.isNotBlank() } ?: patStorage.loadPat()
+        if (savePat && pat?.isNotBlank() == true) {
+            patStorage.savePat(pat)
+            _state.update { it.copy(hasSavedPat = true) }
+        }
         viewModelScope.launch {
             _state.update { it.copy(isCloning = true, cloneLog = emptyList()) }
-            git.clone(url, dest, pat.takeIf { it?.isNotBlank() == true }).collect { line ->
+            git.clone(url, dest, token).collect { line ->
                 _state.update { it.copy(cloneLog = it.cloneLog + line) }
             }
             _state.update { it.copy(isCloning = false) }
@@ -90,11 +102,14 @@ class HomeViewModel(
         return dest
     }
 
-    class Factory(private val ctx: Context, private val container: ContainerManager) :
-        ViewModelProvider.Factory {
+    class Factory(
+        private val ctx: Context,
+        private val container: ContainerManager,
+        private val patStorage: PatStorage
+    ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
-            HomeViewModel(ctx, container) as T
+            HomeViewModel(ctx, container, patStorage) as T
     }
 
     companion object {

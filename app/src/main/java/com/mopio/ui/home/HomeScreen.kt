@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -23,16 +24,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mopio.container.ContainerManager
+import com.mopio.git.PatStorage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     container: ContainerManager,
+    patStorage: PatStorage,
     onOpenProject: (String) -> Unit,
     onSettings: () -> Unit
 ) {
     val ctx = LocalContext.current
-    val vm: HomeViewModel = viewModel(factory = HomeViewModel.Factory(ctx, container))
+    val vm: HomeViewModel = viewModel(factory = HomeViewModel.Factory(ctx, container, patStorage))
     val state by vm.state.collectAsState()
     var showNewDialog   by remember { mutableStateOf(false) }
     var showCloneDialog by remember { mutableStateOf(false) }
@@ -111,12 +114,13 @@ fun HomeScreen(
 
     if (showCloneDialog) {
         CloneDialog(
-            isCloning  = state.isCloning,
-            cloneLog   = state.cloneLog,
-            onConfirm  = { url, name, pat ->
-                vm.cloneProject(url, name, pat)
+            hasSavedToken = state.hasSavedPat,
+            isCloning     = state.isCloning,
+            cloneLog      = state.cloneLog,
+            onConfirm     = { url, name, pat, savePat ->
+                vm.cloneProject(url, name, pat, savePat)
             },
-            onDismiss  = { showCloneDialog = false }
+            onDismiss = { showCloneDialog = false }
         )
     }
 }
@@ -146,14 +150,18 @@ private fun ProjectCard(proj: ProjectSummary, onClick: () -> Unit) {
 
 @Composable
 private fun CloneDialog(
+    hasSavedToken: Boolean,
     isCloning: Boolean,
     cloneLog: List<String>,
-    onConfirm: (url: String, name: String, pat: String?) -> Unit,
+    onConfirm: (url: String, name: String, pat: String?, savePat: Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var url  by remember { mutableStateOf("") }
-    var name by remember { mutableStateOf("") }
-    var pat  by remember { mutableStateOf("") }
+    var url           by remember { mutableStateOf("") }
+    var name          by remember { mutableStateOf("") }
+    var pat           by remember { mutableStateOf("") }
+    var useSavedToken by remember { mutableStateOf(hasSavedToken) }
+    var saveToken     by remember { mutableStateOf(false) }
+
     AlertDialog(
         onDismissRequest = { if (!isCloning) onDismiss() },
         title = { Text("Clone from GitHub") },
@@ -166,6 +174,7 @@ private fun CloneDialog(
                         if (name.isEmpty()) name = it.trimEnd('/').substringAfterLast('/').removeSuffix(".git")
                     },
                     label = { Text("Repository URL") },
+                    placeholder = { Text("https://github.com/user/repo") },
                     singleLine = true,
                     enabled = !isCloning
                 )
@@ -176,13 +185,41 @@ private fun CloneDialog(
                     singleLine = true,
                     enabled = !isCloning
                 )
-                OutlinedTextField(
-                    value = pat,
-                    onValueChange = { pat = it },
-                    label = { Text("GitHub PAT (optional for public repos)") },
-                    singleLine = true,
-                    enabled = !isCloning
-                )
+
+                if (hasSavedToken) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = useSavedToken,
+                            onCheckedChange = { useSavedToken = it },
+                            enabled = !isCloning
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Icon(Icons.Default.Key, null, modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(4.dp))
+                        Text("Use saved GitHub token", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+
+                if (!useSavedToken) {
+                    OutlinedTextField(
+                        value = pat,
+                        onValueChange = { pat = it },
+                        label = { Text("GitHub PAT${if (hasSavedToken) " (override)" else " (optional for public repos)"}") },
+                        singleLine = true,
+                        enabled = !isCloning
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = saveToken,
+                            onCheckedChange = { saveToken = it },
+                            enabled = !isCloning && pat.isNotBlank()
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text("Save this token", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+
                 if (isCloning) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     if (cloneLog.isNotEmpty()) {
@@ -206,7 +243,10 @@ private fun CloneDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onConfirm(url, name, pat.takeIf { it.isNotBlank() }) },
+                onClick = {
+                    val tokenToUse = if (useSavedToken) null else pat.takeIf { it.isNotBlank() }
+                    onConfirm(url, name, tokenToUse, saveToken && !useSavedToken && pat.isNotBlank())
+                },
                 enabled = url.isNotBlank() && name.isNotBlank() && !isCloning
             ) { Text("Clone") }
         },

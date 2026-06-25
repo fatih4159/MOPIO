@@ -18,12 +18,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mopio.git.GitController
+import com.mopio.git.PatStorage
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GitScreen(repoDir: File, gitCtrl: GitController, onBack: () -> Unit) {
-    val vm: GitViewModel = viewModel(factory = GitViewModel.Factory(repoDir, gitCtrl))
+fun GitScreen(repoDir: File, gitCtrl: GitController, patStorage: PatStorage, onBack: () -> Unit) {
+    val vm: GitViewModel = viewModel(factory = GitViewModel.Factory(repoDir, gitCtrl, patStorage))
     val state by vm.state.collectAsState()
     var showCommitDialog by remember { mutableStateOf(false) }
     var showPushDialog   by remember { mutableStateOf(false) }
@@ -38,6 +39,16 @@ fun GitScreen(repoDir: File, gitCtrl: GitController, onBack: () -> Unit) {
                 },
                 title = { Text("Git — ${repoDir.name}") },
                 actions = {
+                    if (state.hasSavedPat) {
+                        Icon(
+                            Icons.Default.Key,
+                            contentDescription = "GitHub token saved",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .padding(end = 4.dp)
+                                .size(18.dp)
+                        )
+                    }
                     if (state.log.isNotEmpty()) {
                         IconButton(onClick = {
                             clipboard.setText(AnnotatedString(state.log.joinToString("\n")))
@@ -91,7 +102,9 @@ fun GitScreen(repoDir: File, gitCtrl: GitController, onBack: () -> Unit) {
                     Text("Commit")
                 }
                 OutlinedButton(
-                    onClick = { showPullDialog = true },
+                    onClick = {
+                        if (state.hasSavedPat) vm.pull() else showPullDialog = true
+                    },
                     modifier = Modifier.weight(1f),
                     enabled = !state.isBusy
                 ) {
@@ -100,7 +113,9 @@ fun GitScreen(repoDir: File, gitCtrl: GitController, onBack: () -> Unit) {
                     Text("Pull")
                 }
                 OutlinedButton(
-                    onClick = { showPushDialog = true },
+                    onClick = {
+                        if (state.hasSavedPat) vm.push() else showPushDialog = true
+                    },
                     modifier = Modifier.weight(1f),
                     enabled = !state.isBusy
                 ) {
@@ -146,20 +161,26 @@ fun GitScreen(repoDir: File, gitCtrl: GitController, onBack: () -> Unit) {
     }
 
     if (showPushDialog) {
-        PatDialog(
+        TokenDialog(
             title = "Push to GitHub",
             confirmLabel = "Push",
-            onConfirm = { pat -> showPushDialog = false; vm.push(pat) },
+            onConfirm = { pat, save ->
+                showPushDialog = false
+                vm.push(pat, save)
+            },
             onDismiss = { showPushDialog = false }
         )
     }
 
     if (showPullDialog) {
-        PatDialog(
+        TokenDialog(
             title = "Pull from remote",
             confirmLabel = "Pull",
             optional = true,
-            onConfirm = { pat -> showPullDialog = false; vm.pull(pat.takeIf { it.isNotBlank() }) },
+            onConfirm = { pat, save ->
+                showPullDialog = false
+                vm.pull(pat.takeIf { it.isNotBlank() }, save)
+            },
             onDismiss = { showPullDialog = false }
         )
     }
@@ -193,35 +214,40 @@ private fun CommitDialog(onConfirm: (String, String, String) -> Unit, onDismiss:
 }
 
 @Composable
-private fun PatDialog(
+private fun TokenDialog(
     title: String,
     confirmLabel: String,
     optional: Boolean = false,
-    onConfirm: (String) -> Unit,
+    onConfirm: (pat: String, save: Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var pat by remember { mutableStateOf("") }
+    var pat  by remember { mutableStateOf("") }
+    var save by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     if (optional) "GitHub PAT is optional for public repositories."
                     else "Enter a GitHub Personal Access Token (PAT) with repo scope.",
                     style = MaterialTheme.typography.bodySmall
                 )
-                Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = pat, onValueChange = { pat = it },
                     label = { Text(if (optional) "GitHub PAT (optional)" else "GitHub PAT") },
                     singleLine = true
                 )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = save, onCheckedChange = { save = it })
+                    Spacer(Modifier.width(4.dp))
+                    Text("Save token for future operations", style = MaterialTheme.typography.bodySmall)
+                }
             }
         },
         confirmButton = {
             Button(
-                onClick = { onConfirm(pat) },
+                onClick = { onConfirm(pat, save) },
                 enabled = optional || pat.isNotBlank()
             ) { Text(confirmLabel) }
         },

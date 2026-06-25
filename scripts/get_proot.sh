@@ -4,7 +4,7 @@
 set -euo pipefail
 
 DEST="app/src/main/jniLibs/arm64-v8a/libproot.so"
-PROOT_VERSION="${PROOT_VERSION:-5.3.0}"
+PROOT_VERSION="${PROOT_VERSION:-5.4.0}"
 URL="https://github.com/proot-me/proot/releases/download/v${PROOT_VERSION}/proot-v${PROOT_VERSION}-aarch64-static"
 
 echo "[get_proot] Downloading proot ${PROOT_VERSION} for aarch64…"
