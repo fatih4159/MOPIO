@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.mopio.git.GitController
+import com.mopio.git.PatStorage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,15 +15,23 @@ import java.io.File
 data class GitState(
     val statusLines: List<String> = emptyList(),
     val log: List<String> = emptyList(),
-    val isBusy: Boolean = false
+    val isBusy: Boolean = false,
+    val hasSavedPat: Boolean = false
 )
 
-class GitViewModel(private val repoDir: File, private val git: GitController) : ViewModel() {
+class GitViewModel(
+    private val repoDir: File,
+    private val git: GitController,
+    private val patStorage: PatStorage
+) : ViewModel() {
 
     private val _state = MutableStateFlow(GitState())
     val state: StateFlow<GitState> = _state.asStateFlow()
 
-    init { refreshStatus() }
+    init {
+        refreshStatus()
+        _state.update { it.copy(hasSavedPat = patStorage.loadPat() != null) }
+    }
 
     fun refreshStatus() {
         viewModelScope.launch {
@@ -43,10 +52,19 @@ class GitViewModel(private val repoDir: File, private val git: GitController) : 
         }
     }
 
-    fun push(pat: String) {
+    fun push(pat: String? = null, savePat: Boolean = false) {
+        val token = pat?.takeIf { it.isNotBlank() } ?: patStorage.loadPat()
+        if (token == null) {
+            _state.update { it.copy(log = listOf("[ERROR] No GitHub token. Save one in Settings → GitHub.")) }
+            return
+        }
+        if (savePat && pat?.isNotBlank() == true) {
+            patStorage.savePat(pat)
+            _state.update { it.copy(hasSavedPat = true) }
+        }
         viewModelScope.launch {
             _state.update { it.copy(isBusy = true, log = emptyList()) }
-            git.push(repoDir, pat).collect { line ->
+            git.push(repoDir, token).collect { line ->
                 _state.update { it.copy(log = it.log + line) }
             }
             _state.update { it.copy(isBusy = false) }
@@ -54,10 +72,15 @@ class GitViewModel(private val repoDir: File, private val git: GitController) : 
         }
     }
 
-    fun pull(pat: String?) {
+    fun pull(pat: String? = null, savePat: Boolean = false) {
+        val token = pat?.takeIf { it.isNotBlank() } ?: patStorage.loadPat()
+        if (savePat && pat?.isNotBlank() == true) {
+            patStorage.savePat(pat)
+            _state.update { it.copy(hasSavedPat = true) }
+        }
         viewModelScope.launch {
             _state.update { it.copy(isBusy = true, log = emptyList()) }
-            git.pull(repoDir, pat.takeIf { it?.isNotBlank() == true }).collect { line ->
+            git.pull(repoDir, token).collect { line ->
                 _state.update { it.copy(log = it.log + line) }
             }
             _state.update { it.copy(isBusy = false) }
@@ -65,10 +88,13 @@ class GitViewModel(private val repoDir: File, private val git: GitController) : 
         }
     }
 
-    class Factory(private val repoDir: File, private val git: GitController) :
-        ViewModelProvider.Factory {
+    class Factory(
+        private val repoDir: File,
+        private val git: GitController,
+        private val patStorage: PatStorage
+    ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
-            GitViewModel(repoDir, git) as T
+            GitViewModel(repoDir, git, patStorage) as T
     }
 }

@@ -12,6 +12,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.mopio.container.ContainerManager
 import com.mopio.git.GitController
+import com.mopio.git.PatStorage
 import com.mopio.phase0.Phase0Screen
 import com.mopio.ui.build.BuildConsoleScreen
 import com.mopio.ui.flash.FlashScreen
@@ -40,10 +41,11 @@ object Routes {
 
 @Composable
 fun AppNav(navController: NavHostController = rememberNavController()) {
-    val ctx     = LocalContext.current
+    val ctx        = LocalContext.current
     val container  = remember { ContainerManager(ctx) }
     val usbBroker  = remember { UsbPortBroker(ctx) }
     val gitCtrl    = remember { GitController() }
+    val patStorage = remember { PatStorage(ctx) }
 
     val start = if (container.isBootstrapped) Routes.HOME else Routes.SETUP
 
@@ -59,6 +61,7 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
         composable(Routes.HOME) {
             HomeScreen(
                 container     = container,
+                patStorage    = patStorage,
                 onOpenProject = { path -> navController.navigate(Routes.project(path)) },
                 onSettings    = { navController.navigate(Routes.SETTINGS) }
             )
@@ -120,17 +123,19 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
         ) { back ->
             val path = Uri.decode(back.arguments?.getString("path") ?: "")
             GitScreen(
-                repoDir  = File(path),
-                gitCtrl  = gitCtrl,
-                onBack   = { navController.popBackStack() }
+                repoDir    = File(path),
+                gitCtrl    = gitCtrl,
+                patStorage = patStorage,
+                onBack     = { navController.popBackStack() }
             )
         }
 
         composable(Routes.SETTINGS) {
             SettingsScreen(
-                container = container,
-                onBack    = { navController.popBackStack() },
-                onPhase0  = { navController.navigate(Routes.PHASE0) }
+                container  = container,
+                patStorage = patStorage,
+                onBack     = { navController.popBackStack() },
+                onPhase0   = { navController.navigate(Routes.PHASE0) }
             )
         }
 

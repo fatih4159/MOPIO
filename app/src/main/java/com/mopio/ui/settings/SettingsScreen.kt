@@ -12,12 +12,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.mopio.container.ContainerManager
+import com.mopio.git.PatStorage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(container: ContainerManager, onBack: () -> Unit, onPhase0: () -> Unit = {}) {
-    var showResetConfirm by remember { mutableStateOf(false) }
-    var rootfsInfo by remember { mutableStateOf("") }
+fun SettingsScreen(
+    container: ContainerManager,
+    patStorage: PatStorage,
+    onBack: () -> Unit,
+    onPhase0: () -> Unit = {}
+) {
+    var showResetConfirm  by remember { mutableStateOf(false) }
+    var showPatDialog     by remember { mutableStateOf(false) }
+    var showClearPatConfirm by remember { mutableStateOf(false) }
+    var rootfsInfo        by remember { mutableStateOf("") }
+    var patSaved          by remember { mutableStateOf(patStorage.loadPat() != null) }
 
     LaunchedEffect(Unit) {
         val rootfsDir = container.rootfsDir
@@ -43,9 +52,28 @@ fun SettingsScreen(container: ContainerManager, onBack: () -> Unit, onPhase0: ()
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            item { SettingsSectionHeader("GitHub") }
             item {
-                SettingsSectionHeader("Container")
+                SettingsItem(
+                    icon = Icons.Default.Key,
+                    title = "Personal Access Token",
+                    subtitle = if (patSaved) "Token saved — used for private repos and authenticated operations"
+                               else "Not set — required for private repos",
+                    onClick = { showPatDialog = true }
+                )
             }
+            if (patSaved) {
+                item {
+                    SettingsItem(
+                        icon = Icons.Default.Delete,
+                        title = "Clear GitHub token",
+                        subtitle = "Remove saved PAT from encrypted storage",
+                        destructive = true
+                    ) { showClearPatConfirm = true }
+                }
+            }
+
+            item { Spacer(Modifier.height(8.dp)); SettingsSectionHeader("Container") }
             item {
                 SettingsItem(
                     icon = Icons.Default.Storage,
@@ -94,6 +122,36 @@ fun SettingsScreen(container: ContainerManager, onBack: () -> Unit, onPhase0: ()
         }
     }
 
+    if (showPatDialog) {
+        PatDialog(
+            onConfirm = { newPat ->
+                patStorage.savePat(newPat)
+                patSaved = true
+                showPatDialog = false
+            },
+            onDismiss = { showPatDialog = false }
+        )
+    }
+
+    if (showClearPatConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearPatConfirm = false },
+            title = { Text("Clear GitHub token?") },
+            text = { Text("The saved PAT will be deleted. You'll need to re-enter it for private repos.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        patStorage.clearPat()
+                        patSaved = false
+                        showClearPatConfirm = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Clear") }
+            },
+            dismissButton = { TextButton(onClick = { showClearPatConfirm = false }) { Text("Cancel") } }
+        )
+    }
+
     if (showResetConfirm) {
         AlertDialog(
             onDismissRequest = { showResetConfirm = false },
@@ -111,6 +169,33 @@ fun SettingsScreen(container: ContainerManager, onBack: () -> Unit, onPhase0: ()
             dismissButton = { TextButton(onClick = { showResetConfirm = false }) { Text("Cancel") } }
         )
     }
+}
+
+@Composable
+private fun PatDialog(onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
+    var pat by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("GitHub Personal Access Token") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Enter a PAT with repo scope. It is stored encrypted on this device and never sent anywhere except to GitHub.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                OutlinedTextField(
+                    value = pat,
+                    onValueChange = { pat = it },
+                    label = { Text("ghp_…") },
+                    singleLine = true
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(pat) }, enabled = pat.isNotBlank()) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 @Composable
